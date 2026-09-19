@@ -79,6 +79,12 @@ class _EditorScreenState extends State<EditorScreen> {
   double _tamanhoFonte = 32;
   bool _compartilhando = false;
 
+  // Posição do texto relativa ao centro do canvas (em pixels), e o
+  // tamanho do canvas medido em tempo de build — usados pra arrastar
+  // e pra manter o texto dentro dos limites do cartão.
+  Offset _posicaoTexto = Offset.zero;
+  Size _tamanhoCanvas = Size.zero;
+
   @override
   void dispose() {
     _textoController.dispose();
@@ -141,6 +147,24 @@ class _EditorScreenState extends State<EditorScreen> {
     setState(() {
       _fotoFundo = File(arquivo.path);
       _fundoSelecionado = null;
+    });
+  }
+
+  void _aoArrastarTexto(DragUpdateDetails detalhes) {
+    if (_tamanhoCanvas == Size.zero) return;
+
+    // Limite: mantém o texto dentro de uma margem do cartão, sem deixar
+    // arrastar pra fora completamente.
+    final margem = 24.0;
+    final limiteX = (_tamanhoCanvas.width / 2) - margem;
+    final limiteY = (_tamanhoCanvas.height / 2) - margem;
+
+    setState(() {
+      final novaPosicao = _posicaoTexto + detalhes.delta;
+      _posicaoTexto = Offset(
+        novaPosicao.dx.clamp(-limiteX, limiteX),
+        novaPosicao.dy.clamp(-limiteY, limiteY),
+      );
     });
   }
 
@@ -231,67 +255,94 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   Widget _buildCanvas() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: _fotoFundo == null
-            ? LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: _fundoSelecionado!.cores,
-              )
-            : null,
-        image: _fotoFundo != null
-            ? DecorationImage(
-                image: FileImage(_fotoFundo!),
-                fit: BoxFit.cover,
-              )
-            : null,
-      ),
-      child: Stack(
-        children: [
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(28),
-              child: Text(
-                _textoController.text.isEmpty
-                    ? 'Toque abaixo\ne escreva algo'
-                    : _textoController.text,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: _tamanhoFonte,
-                  fontWeight: FontWeight.w800,
-                  height: 1.15,
-                  color: _textoClaro ? Colors.white : const Color(0xFF14101B),
-                  shadows: _textoClaro
-                      ? [
-                          const Shadow(
-                            color: Colors.black26,
-                            blurRadius: 12,
-                            offset: Offset(0, 3),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Atualiza o tamanho conhecido do canvas (usado pro clamp do
+        // arrasto) sem chamar setState durante o build.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final tamanhoAtual =
+              Size(constraints.maxWidth, constraints.maxHeight);
+          if (_tamanhoCanvas != tamanhoAtual && mounted) {
+            setState(() => _tamanhoCanvas = tamanhoAtual);
+          }
+        });
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            gradient: _fotoFundo == null
+                ? LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: _fundoSelecionado!.cores,
+                  )
+                : null,
+            image: _fotoFundo != null
+                ? DecorationImage(
+                    image: FileImage(_fotoFundo!),
+                    fit: BoxFit.cover,
+                  )
+                : null,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Stack(
+              children: [
+                Center(
+                  child: Transform.translate(
+                    offset: _posicaoTexto,
+                    child: GestureDetector(
+                      onPanUpdate: _aoArrastarTexto,
+                      child: Container(
+                        // Área de toque um pouco maior que o texto em si,
+                        // pra facilitar arrastar mesmo com dedo grande.
+                        padding: const EdgeInsets.all(12),
+                        child: Text(
+                          _textoController.text.isEmpty
+                              ? 'Toque abaixo\ne escreva algo'
+                              : _textoController.text,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: _tamanhoFonte,
+                            fontWeight: FontWeight.w800,
+                            height: 1.15,
+                            color: _textoClaro
+                                ? Colors.white
+                                : const Color(0xFF14101B),
+                            shadows: _textoClaro
+                                ? [
+                                    const Shadow(
+                                      color: Colors.black26,
+                                      blurRadius: 12,
+                                      offset: Offset(0, 3),
+                                    ),
+                                  ]
+                                : null,
                           ),
-                        ]
-                      : null,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                Positioned(
+                  right: 14,
+                  bottom: 12,
+                  child: Text(
+                    'bombou!',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: (_textoClaro ? Colors.white : Colors.black)
+                          .withValues(alpha: 0.55),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          Positioned(
-            right: 14,
-            bottom: 12,
-            child: Text(
-              'bombou!',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: (_textoClaro ? Colors.white : Colors.black)
-                    .withValues(alpha: 0.55),
-              ),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -393,6 +444,12 @@ class _EditorScreenState extends State<EditorScreen> {
                   inactiveColor: Colors.white24,
                   onChanged: (v) => setState(() => _tamanhoFonte = v),
                 ),
+              ),
+              IconButton(
+                onPressed: () => setState(() => _posicaoTexto = Offset.zero),
+                icon: const Icon(Icons.center_focus_strong, size: 20),
+                color: corTextoClaro.withValues(alpha: 0.6),
+                tooltip: 'Centralizar texto',
               ),
             ],
           ),
