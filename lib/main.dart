@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -11,12 +12,15 @@ void main() {
 }
 
 // ---------------------------------------------------------------------
-// Paleta própria do "Bombou!" — nada de Material padrão genérico.
+// Paleta própria do "Bombou!" — fundo bege quente tipo papel de parede
+// do WhatsApp, com marca d'água da palavra "bombou" repetida.
 // ---------------------------------------------------------------------
-const Color corFundoApp = Color(0xFF14101B); // roxo-ardósia bem escuro
+const Color corFundoApp = Color(0xFFEDE0D4); // bege quente
+const Color corMarcaDagua = Color(0xFF8C6F5A); // marrom suave (usado com baixa opacidade)
+const Color corTextoEscuro = Color(0xFF3A2E27); // texto/ícones fora do canvas
 const Color corCoral = Color(0xFFFF4D6D); // destaque principal (CTA)
 const Color corLimao = Color(0xFFC6FF3D); // destaque de seleção
-const Color corTextoClaro = Color(0xFFF5F1EC);
+const Color corTextoClaro = Color(0xFFF5F1EC); // texto claro, usado dentro do canvas
 
 class BombouApp extends StatelessWidget {
   const BombouApp({super.key});
@@ -29,7 +33,7 @@ class BombouApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         scaffoldBackgroundColor: corFundoApp,
-        colorScheme: const ColorScheme.dark(
+        colorScheme: const ColorScheme.light(
           primary: corCoral,
           secondary: corLimao,
           surface: corFundoApp,
@@ -81,6 +85,61 @@ class StickerItem {
   }) : id = UniqueKey();
 }
 
+// ---------------------------------------------------------------------
+// Papel de parede do app: a palavra "bombou" repetida na diagonal,
+// baixa opacidade, tipo marca d'água — inspirado no wallpaper clássico
+// do WhatsApp.
+// ---------------------------------------------------------------------
+class FundoBombouPainter extends CustomPainter {
+  const FundoBombouPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Seed fixo: o padrão não "pisca" ou se reembaralha a cada rebuild.
+    final random = math.Random(7);
+    final corMarca = corMarcaDagua.withValues(alpha: 0.08);
+
+    const espacamentoX = 140.0;
+    const espacamentoY = 100.0;
+
+    var linha = 0;
+    for (double y = -espacamentoY; y < size.height + espacamentoY; y += espacamentoY) {
+      final deslocamentoLinha = (linha.isOdd) ? espacamentoX / 2 : 0.0;
+      linha++;
+
+      for (double x = -espacamentoX; x < size.width + espacamentoX; x += espacamentoX) {
+        final anguloJitter = (random.nextDouble() - 0.5) * 0.2;
+        final tamanhoJitter = 20.0 + random.nextDouble() * 6;
+
+        final textPainter = TextPainter(
+          text: TextSpan(
+            text: 'bombou',
+            style: TextStyle(
+              color: corMarca,
+              fontSize: tamanhoJitter,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.5,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+
+        canvas.save();
+        canvas.translate(x + deslocamentoLinha, y);
+        canvas.rotate(-0.35 + anguloJitter);
+        textPainter.paint(
+          canvas,
+          Offset(-textPainter.width / 2, -textPainter.height / 2),
+        );
+        canvas.restore();
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant FundoBombouPainter oldDelegate) => false;
+}
+
 class EditorScreen extends StatefulWidget {
   const EditorScreen({super.key});
 
@@ -126,25 +185,25 @@ class _EditorScreenState extends State<EditorScreen> {
               const Text(
                 'Escolher foto de fundo',
                 style: TextStyle(
-                  color: corTextoClaro,
+                  color: corTextoEscuro,
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                 ),
               ),
               const SizedBox(height: 8),
               ListTile(
-                leading: const Icon(Icons.photo_library, color: corLimao),
+                leading: const Icon(Icons.photo_library, color: corCoral),
                 title: const Text(
                   'Galeria',
-                  style: TextStyle(color: corTextoClaro),
+                  style: TextStyle(color: corTextoEscuro),
                 ),
                 onTap: () => Navigator.pop(context, ImageSource.gallery),
               ),
               ListTile(
-                leading: const Icon(Icons.photo_camera, color: corLimao),
+                leading: const Icon(Icons.photo_camera, color: corCoral),
                 title: const Text(
                   'Câmera',
-                  style: TextStyle(color: corTextoClaro),
+                  style: TextStyle(color: corTextoEscuro),
                 ),
                 onTap: () => Navigator.pop(context, ImageSource.camera),
               ),
@@ -171,8 +230,6 @@ class _EditorScreenState extends State<EditorScreen> {
 
   void _adicionarSticker(String emoji) {
     setState(() {
-      // Cada novo sticker entra um pouco deslocado do anterior, pra não
-      // empilhar tudo exatamente no mesmo lugar.
       final deslocamento = (_stickers.length % 5) * 14.0;
       _stickers.add(
         StickerItem(
@@ -245,24 +302,33 @@ class _EditorScreenState extends State<EditorScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildTopo(),
-            Expanded(
-              child: Center(
-                child: AspectRatio(
-                  aspectRatio: 9 / 16,
-                  child: RepaintBoundary(
-                    key: _canvasKey,
-                    child: _buildCanvas(),
+      body: Stack(
+        children: [
+          // Papel de parede do app: fica atrás de tudo, aparecendo nos
+          // espaços em volta do canvas (que tem seu próprio fundo opaco).
+          Positioned.fill(
+            child: CustomPaint(painter: const FundoBombouPainter()),
+          ),
+          SafeArea(
+            child: Column(
+              children: [
+                _buildTopo(),
+                Expanded(
+                  child: Center(
+                    child: AspectRatio(
+                      aspectRatio: 9 / 16,
+                      child: RepaintBoundary(
+                        key: _canvasKey,
+                        child: _buildCanvas(),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                _buildControles(),
+              ],
             ),
-            _buildControles(),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -277,7 +343,7 @@ class _EditorScreenState extends State<EditorScreen> {
             style: TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.w900,
-              color: corTextoClaro,
+              color: corTextoEscuro,
               letterSpacing: -0.5,
             ),
           ),
@@ -286,7 +352,7 @@ class _EditorScreenState extends State<EditorScreen> {
             onPressed: () => setState(() => _textoClaro = !_textoClaro),
             icon: Icon(
               Icons.contrast,
-              color: corTextoClaro.withValues(alpha: 0.7),
+              color: corTextoEscuro.withValues(alpha: 0.7),
             ),
             tooltip: 'Cor do texto',
           ),
@@ -310,6 +376,13 @@ class _EditorScreenState extends State<EditorScreen> {
           margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: corTextoEscuro.withValues(alpha: 0.15),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
             gradient: _fotoFundo == null
                 ? LinearGradient(
                     begin: Alignment.topLeft,
@@ -423,7 +496,7 @@ class _EditorScreenState extends State<EditorScreen> {
                       width: 56,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.white.withValues(alpha: 0.08),
+                        color: corTextoEscuro.withValues(alpha: 0.06),
                         image: _fotoFundo != null
                             ? DecorationImage(
                                 image: FileImage(_fotoFundo!),
@@ -431,14 +504,14 @@ class _EditorScreenState extends State<EditorScreen> {
                               )
                             : null,
                         border: selecionado
-                            ? Border.all(color: corLimao, width: 3)
+                            ? Border.all(color: corCoral, width: 3)
                             : Border.all(
-                                color: Colors.white.withValues(alpha: 0.25),
+                                color: corTextoEscuro.withValues(alpha: 0.2),
                               ),
                       ),
                       child: _fotoFundo == null
                           ? const Icon(Icons.add_a_photo,
-                              color: corTextoClaro, size: 22)
+                              color: corTextoEscuro, size: 22)
                           : null,
                     ),
                   );
@@ -458,7 +531,7 @@ class _EditorScreenState extends State<EditorScreen> {
                       shape: BoxShape.circle,
                       gradient: LinearGradient(colors: fundo.cores),
                       border: selecionado
-                          ? Border.all(color: corLimao, width: 3)
+                          ? Border.all(color: corCoral, width: 3)
                           : null,
                     ),
                   ),
@@ -483,7 +556,7 @@ class _EditorScreenState extends State<EditorScreen> {
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.06),
+                      color: corTextoEscuro.withValues(alpha: 0.06),
                     ),
                     child: Text(emoji, style: const TextStyle(fontSize: 22)),
                   ),
@@ -497,13 +570,13 @@ class _EditorScreenState extends State<EditorScreen> {
             maxLines: 2,
             maxLength: 80,
             onChanged: (_) => setState(() {}),
-            style: const TextStyle(color: corTextoClaro),
+            style: const TextStyle(color: corTextoEscuro),
             decoration: InputDecoration(
               hintText: 'Escreva sua frase...',
-              hintStyle: TextStyle(color: corTextoClaro.withValues(alpha: 0.4)),
+              hintStyle: TextStyle(color: corTextoEscuro.withValues(alpha: 0.4)),
               filled: true,
-              fillColor: Colors.white.withValues(alpha: 0.06),
-              counterStyle: TextStyle(color: corTextoClaro.withValues(alpha: 0.4)),
+              fillColor: Colors.white.withValues(alpha: 0.5),
+              counterStyle: TextStyle(color: corTextoEscuro.withValues(alpha: 0.4)),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide.none,
@@ -515,21 +588,21 @@ class _EditorScreenState extends State<EditorScreen> {
           const SizedBox(height: 10),
           Row(
             children: [
-              const Text('Tamanho', style: TextStyle(color: corTextoClaro)),
+              const Text('Tamanho', style: TextStyle(color: corTextoEscuro)),
               Expanded(
                 child: Slider(
                   value: _tamanhoFonte,
                   min: 18,
                   max: 52,
-                  activeColor: corLimao,
-                  inactiveColor: Colors.white24,
+                  activeColor: corCoral,
+                  inactiveColor: corTextoEscuro.withValues(alpha: 0.15),
                   onChanged: (v) => setState(() => _tamanhoFonte = v),
                 ),
               ),
               IconButton(
                 onPressed: () => setState(() => _posicaoTexto = Offset.zero),
                 icon: const Icon(Icons.center_focus_strong, size: 20),
-                color: corTextoClaro.withValues(alpha: 0.6),
+                color: corTextoEscuro.withValues(alpha: 0.6),
                 tooltip: 'Centralizar texto',
               ),
             ],
