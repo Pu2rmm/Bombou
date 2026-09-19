@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:gal/gal.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -210,6 +211,18 @@ class FundoBombouPainter extends CustomPainter {
   bool shouldRepaint(covariant FundoBombouPainter oldDelegate) => false;
 }
 
+// ---------------------------------------------------------------------
+// Pasta onde ficam as criações salvas (histórico dentro do próprio app).
+// ---------------------------------------------------------------------
+Future<Directory> _obterPastaHistorico() async {
+  final documentos = await getApplicationDocumentsDirectory();
+  final pasta = Directory('${documentos.path}/historico');
+  if (!await pasta.exists()) {
+    await pasta.create(recursive: true);
+  }
+  return pasta;
+}
+
 class EditorScreen extends StatefulWidget {
   const EditorScreen({super.key});
 
@@ -228,14 +241,17 @@ class _EditorScreenState extends State<EditorScreen> {
   bool _compartilhando = false;
   int _indiceFonteSelecionada = 0;
 
-  // Cor padrão do texto (aplicada a palavras sem cor própria) e as cores
-  // individuais por palavra (null = usa a cor padrão).
   Color _corTexto = Colors.white;
   List<Color?> _coresPalavras = [];
   int? _indicePalavraSelecionada;
 
   Offset _posicaoTexto = Offset.zero;
   Size _tamanhoCanvas = Size.zero;
+
+  // Rotação do texto (radianos) e valor guardado ao iniciar um gesto de
+  // dois dedos, pra calcular a rotação incremental corretamente.
+  double _anguloTexto = 0;
+  double _anguloAoIniciarGesto = 0;
 
   final List<StickerItem> _stickers = [];
 
@@ -378,9 +394,19 @@ class _EditorScreenState extends State<EditorScreen> {
     );
   }
 
-  void _aoArrastarTexto(DragUpdateDetails detalhes) {
+  // Início do gesto no texto: guarda o ângulo atual como referência pro
+  // cálculo da rotação incremental durante o giro de dois dedos.
+  void _aoIniciarGestoTexto(ScaleStartDetails detalhes) {
+    _anguloAoIniciarGesto = _anguloTexto;
+  }
+
+  // Um único gesto cobre mover (1 dedo, rotation fica em 0) e girar
+  // (2 dedos torcendo) — a forma recomendada pelo Flutter de combinar
+  // pan + rotação no mesmo detector.
+  void _aoAtualizarGestoTexto(ScaleUpdateDetails detalhes) {
     setState(() {
-      _posicaoTexto = _clampNaArea(_posicaoTexto + detalhes.delta, 24);
+      _posicaoTexto = _clampNaArea(_posicaoTexto + detalhes.focalPointDelta, 24);
+      _anguloTexto = _anguloAoIniciarGesto + detalhes.rotation;
     });
   }
 
@@ -413,17 +439,24 @@ class _EditorScreenState extends State<EditorScreen> {
       if (bytesData == null) return;
 
       final bytes = bytesData.buffer.asUint8List();
-      final diretorio = await getTemporaryDirectory();
-      final caminho =
-          '${diretorio.path}/bombou_${DateTime.now().millisecondsSinceEpoch}.png';
-      final arquivo = File(caminho);
-      await arquivo.writeAsBytes(bytes);
+      final nomeArquivo = 'bombou_${DateTime.now().millisecondsSinceEpoch}.png';
+
+      final pastaHistorico = await _obterPastaHistorico();
+      final arquivoHistorico = File('${pastaHistorico.path}/$nomeArquivo');
+      await arquivoHistorico.writeAsBytes(bytes);
+
+      try {
+        await Gal.putImageBytes(bytes, album: 'Bombou', name: nomeArquivo);
+      } catch (_) {
+        // Ignorado de propósito: a criação já está salva no histórico
+        // do app mesmo que não consiga ir pra galeria do sistema.
+      }
 
       if (!mounted) return;
 
       await SharePlus.instance.share(
         ShareParams(
-          files: [XFile(arquivo.path)],
+          files: [XFile(arquivoHistorico.path)],
           text: 'Feito com o Bombou! 🔥',
         ),
       );
@@ -465,11 +498,11 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   Widget _buildTopo() {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
       child: Row(
         children: [
-          Text(
+          const Text(
             'Bombou!',
             style: TextStyle(
               fontSize: 26,
@@ -478,14 +511,25 @@ class _EditorScreenState extends State<EditorScreen> {
               letterSpacing: -0.5,
             ),
           ),
+          const Spacer(),
+          IconButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const HistoricoScreen()),
+              );
+            },
+            icon: Icon(
+              Icons.grid_view_rounded,
+              color: corTextoEscuro.withValues(alpha: 0.7),
+            ),
+            tooltip: 'Minhas criações',
+          ),
         ],
       ),
     );
   }
 
-  // Monta o texto do canvas com cada palavra na sua cor (própria, se
-  // definida, ou a cor padrão) — cada uma com sombra de contraste
-  // calculada pela própria luminância, pra ficar legível sozinha.
   InlineSpan _construirSpanPalavra(String palavra, Color cor, OpcaoFonte fonte) {
     final estilo = fonte.construtor(fontSize: _tamanhoFonte, color: cor);
     final corSombra = cor.computeLuminance() > 0.5
@@ -547,37 +591,41 @@ class _EditorScreenState extends State<EditorScreen> {
                 Center(
                   child: Transform.translate(
                     offset: _posicaoTexto,
-                    child: GestureDetector(
-                      onPanUpdate: _aoArrastarTexto,
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        child: palavras.isEmpty
-                            ? Text(
-                                'Toque abaixo\ne escreva algo',
-                                textAlign: TextAlign.center,
-                                style: fonteAtual.construtor(
-                                  fontSize: _tamanhoFonte,
-                                  color: _corTexto,
-                                ),
-                              )
-                            : RichText(
-                                textAlign: TextAlign.center,
-                                text: TextSpan(
-                                  children: [
-                                    for (var i = 0; i < palavras.length; i++) ...[
-                                      _construirSpanPalavra(
-                                        palavras[i],
-                                        _coresPalavras.length > i
-                                            ? (_coresPalavras[i] ?? _corTexto)
-                                            : _corTexto,
-                                        fonteAtual,
-                                      ),
-                                      if (i < palavras.length - 1)
-                                        const TextSpan(text: ' '),
+                    child: Transform.rotate(
+                      angle: _anguloTexto,
+                      child: GestureDetector(
+                        onScaleStart: _aoIniciarGestoTexto,
+                        onScaleUpdate: _aoAtualizarGestoTexto,
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          child: palavras.isEmpty
+                              ? Text(
+                                  'Toque abaixo\ne escreva algo',
+                                  textAlign: TextAlign.center,
+                                  style: fonteAtual.construtor(
+                                    fontSize: _tamanhoFonte,
+                                    color: _corTexto,
+                                  ),
+                                )
+                              : RichText(
+                                  textAlign: TextAlign.center,
+                                  text: TextSpan(
+                                    children: [
+                                      for (var i = 0; i < palavras.length; i++) ...[
+                                        _construirSpanPalavra(
+                                          palavras[i],
+                                          _coresPalavras.length > i
+                                              ? (_coresPalavras[i] ?? _corTexto)
+                                              : _corTexto,
+                                          fonteAtual,
+                                        ),
+                                        if (i < palavras.length - 1)
+                                          const TextSpan(text: ' '),
+                                      ],
                                     ],
-                                  ],
+                                  ),
                                 ),
-                              ),
+                        ),
                       ),
                     ),
                   ),
@@ -777,8 +825,6 @@ class _EditorScreenState extends State<EditorScreen> {
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
           ),
-          // Chips de palavra — só aparecem quando há mais de uma palavra
-          // (com uma só, colorir "por palavra" ou "no geral" dá no mesmo).
           if (palavras.length > 1) ...[
             const SizedBox(height: 10),
             SizedBox(
@@ -899,10 +945,13 @@ class _EditorScreenState extends State<EditorScreen> {
                 ),
               ),
               IconButton(
-                onPressed: () => setState(() => _posicaoTexto = Offset.zero),
+                onPressed: () => setState(() {
+                  _posicaoTexto = Offset.zero;
+                  _anguloTexto = 0;
+                }),
                 icon: const Icon(Icons.center_focus_strong, size: 20),
                 color: corTextoEscuro.withValues(alpha: 0.6),
-                tooltip: 'Centralizar texto',
+                tooltip: 'Centralizar e desrotacionar texto',
               ),
             ],
           ),
@@ -936,6 +985,167 @@ class _EditorScreenState extends State<EditorScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------
+// Tela de histórico: mostra em grid tudo que já foi compartilhado,
+// com opção de reabrir/compartilhar de novo ou excluir.
+// ---------------------------------------------------------------------
+class HistoricoScreen extends StatefulWidget {
+  const HistoricoScreen({super.key});
+
+  @override
+  State<HistoricoScreen> createState() => _HistoricoScreenState();
+}
+
+class _HistoricoScreenState extends State<HistoricoScreen> {
+  List<File> _arquivos = [];
+  bool _carregando = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _carregar();
+  }
+
+  Future<void> _carregar() async {
+    final pasta = await _obterPastaHistorico();
+    final arquivos = pasta
+        .listSync()
+        .whereType<File>()
+        .where((arquivo) => arquivo.path.endsWith('.png'))
+        .toList()
+      ..sort(
+        (a, b) => b.statSync().modified.compareTo(a.statSync().modified),
+      );
+
+    if (mounted) {
+      setState(() {
+        _arquivos = arquivos;
+        _carregando = false;
+      });
+    }
+  }
+
+  Future<void> _excluir(File arquivo) async {
+    await arquivo.delete();
+    if (mounted) setState(() => _arquivos.remove(arquivo));
+  }
+
+  Future<void> _compartilharDeNovo(File arquivo) async {
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(arquivo.path)],
+        text: 'Feito com o Bombou! 🔥',
+      ),
+    );
+  }
+
+  void _abrirDetalhe(File arquivo) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Image.file(arquivo),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _botaoRedondo(
+                  icone: Icons.ios_share,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _compartilharDeNovo(arquivo);
+                  },
+                ),
+                const SizedBox(width: 16),
+                _botaoRedondo(
+                  icone: Icons.delete_outline,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _excluir(arquivo);
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _botaoRedondo({required IconData icone, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white.withValues(alpha: 0.15),
+        ),
+        child: Icon(icone, color: Colors.white),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: corFundoApp,
+      appBar: AppBar(
+        backgroundColor: corFundoApp,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: corTextoEscuro),
+        title: const Text(
+          'Minhas criações',
+          style: TextStyle(
+            color: corTextoEscuro,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+      body: _carregando
+          ? const Center(child: CircularProgressIndicator(color: corCoral))
+          : _arquivos.isEmpty
+              ? Center(
+                  child: Text(
+                    'Nenhuma criação ainda.\nCompartilhe algo pra ver aqui!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: corTextoEscuro.withValues(alpha: 0.5),
+                    ),
+                  ),
+                )
+              : GridView.builder(
+                  padding: const EdgeInsets.all(16),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    childAspectRatio: 9 / 16,
+                  ),
+                  itemCount: _arquivos.length,
+                  itemBuilder: (context, index) {
+                    final arquivo = _arquivos[index];
+                    return GestureDetector(
+                      onTap: () => _abrirDetalhe(arquivo),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.file(arquivo, fit: BoxFit.cover),
+                      ),
+                    );
+                  },
+                ),
     );
   }
 }
