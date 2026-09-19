@@ -61,6 +61,26 @@ const List<OpcaoFundo> fundos = [
   OpcaoFundo('Oceano', [Color(0xFF0B0714), Color(0xFF00B4D8)]),
 ];
 
+// Emojis disponíveis pra colar na imagem.
+const List<String> emojisDisponiveis = [
+  '🔥', '😂', '❤️', '😍', '💯', '👏', '😎', '🎉', '💀', '✨',
+];
+
+// Um emoji colado no canvas: guarda posição, tamanho e uma chave única
+// (pra identificar qual remover/mover).
+class StickerItem {
+  final Key id;
+  final String emoji;
+  Offset posicao;
+  double tamanho;
+
+  StickerItem({
+    required this.emoji,
+    required this.posicao,
+    this.tamanho = 48,
+  }) : id = UniqueKey();
+}
+
 class EditorScreen extends StatefulWidget {
   const EditorScreen({super.key});
 
@@ -79,11 +99,10 @@ class _EditorScreenState extends State<EditorScreen> {
   double _tamanhoFonte = 32;
   bool _compartilhando = false;
 
-  // Posição do texto relativa ao centro do canvas (em pixels), e o
-  // tamanho do canvas medido em tempo de build — usados pra arrastar
-  // e pra manter o texto dentro dos limites do cartão.
   Offset _posicaoTexto = Offset.zero;
   Size _tamanhoCanvas = Size.zero;
+
+  final List<StickerItem> _stickers = [];
 
   @override
   void dispose() {
@@ -150,21 +169,43 @@ class _EditorScreenState extends State<EditorScreen> {
     });
   }
 
-  void _aoArrastarTexto(DragUpdateDetails detalhes) {
-    if (_tamanhoCanvas == Size.zero) return;
+  void _adicionarSticker(String emoji) {
+    setState(() {
+      // Cada novo sticker entra um pouco deslocado do anterior, pra não
+      // empilhar tudo exatamente no mesmo lugar.
+      final deslocamento = (_stickers.length % 5) * 14.0;
+      _stickers.add(
+        StickerItem(
+          emoji: emoji,
+          posicao: Offset(deslocamento - 28, deslocamento - 28),
+        ),
+      );
+    });
+  }
 
-    // Limite: mantém o texto dentro de uma margem do cartão, sem deixar
-    // arrastar pra fora completamente.
-    final margem = 24.0;
+  void _removerSticker(StickerItem sticker) {
+    setState(() => _stickers.remove(sticker));
+  }
+
+  Offset _clampNaArea(Offset posicao, double margem) {
+    if (_tamanhoCanvas == Size.zero) return posicao;
     final limiteX = (_tamanhoCanvas.width / 2) - margem;
     final limiteY = (_tamanhoCanvas.height / 2) - margem;
+    return Offset(
+      posicao.dx.clamp(-limiteX, limiteX),
+      posicao.dy.clamp(-limiteY, limiteY),
+    );
+  }
 
+  void _aoArrastarTexto(DragUpdateDetails detalhes) {
     setState(() {
-      final novaPosicao = _posicaoTexto + detalhes.delta;
-      _posicaoTexto = Offset(
-        novaPosicao.dx.clamp(-limiteX, limiteX),
-        novaPosicao.dy.clamp(-limiteY, limiteY),
-      );
+      _posicaoTexto = _clampNaArea(_posicaoTexto + detalhes.delta, 24);
+    });
+  }
+
+  void _aoArrastarSticker(StickerItem sticker, DragUpdateDetails detalhes) {
+    setState(() {
+      sticker.posicao = _clampNaArea(sticker.posicao + detalhes.delta, 16);
     });
   }
 
@@ -257,8 +298,6 @@ class _EditorScreenState extends State<EditorScreen> {
   Widget _buildCanvas() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Atualiza o tamanho conhecido do canvas (usado pro clamp do
-        // arrasto) sem chamar setState durante o build.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final tamanhoAtual =
               Size(constraints.maxWidth, constraints.maxHeight);
@@ -295,8 +334,6 @@ class _EditorScreenState extends State<EditorScreen> {
                     child: GestureDetector(
                       onPanUpdate: _aoArrastarTexto,
                       child: Container(
-                        // Área de toque um pouco maior que o texto em si,
-                        // pra facilitar arrastar mesmo com dedo grande.
                         padding: const EdgeInsets.all(12),
                         child: Text(
                           _textoController.text.isEmpty
@@ -325,6 +362,25 @@ class _EditorScreenState extends State<EditorScreen> {
                     ),
                   ),
                 ),
+                for (final sticker in _stickers)
+                  Center(
+                    key: sticker.id,
+                    child: Transform.translate(
+                      offset: sticker.posicao,
+                      child: GestureDetector(
+                        onPanUpdate: (detalhes) =>
+                            _aoArrastarSticker(sticker, detalhes),
+                        onLongPress: () => _removerSticker(sticker),
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          child: Text(
+                            sticker.emoji,
+                            style: TextStyle(fontSize: sticker.tamanho),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 Positioned(
                   right: 14,
                   bottom: 12,
@@ -405,6 +461,31 @@ class _EditorScreenState extends State<EditorScreen> {
                           ? Border.all(color: corLimao, width: 3)
                           : null,
                     ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 48,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: emojisDisponiveis.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final emoji = emojisDisponiveis[index];
+                return GestureDetector(
+                  onTap: () => _adicionarSticker(emoji),
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.06),
+                    ),
+                    child: Text(emoji, style: const TextStyle(fontSize: 22)),
                   ),
                 );
               },
