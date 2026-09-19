@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -70,6 +71,64 @@ const List<String> emojisDisponiveis = [
   '🔥', '😂', '❤️', '😍', '💯', '👏', '😎', '🎉', '💀', '✨',
 ];
 
+// ---------------------------------------------------------------------
+// Fontes disponíveis pro texto — cada uma com uma personalidade
+// diferente, usando Google Fonts (baixadas sob demanda).
+// ---------------------------------------------------------------------
+class OpcaoFonte {
+  final String nome;
+  final TextStyle Function({required double fontSize, required Color color})
+      construtor;
+
+  const OpcaoFonte(this.nome, this.construtor);
+}
+
+final List<OpcaoFonte> fontes = [
+  OpcaoFonte(
+    'Impacto',
+    ({required fontSize, required color}) => GoogleFonts.anton(
+      fontSize: fontSize,
+      color: color,
+      height: 1.15,
+    ),
+  ),
+  OpcaoFonte(
+    'Arredondada',
+    ({required fontSize, required color}) => GoogleFonts.fredoka(
+      fontSize: fontSize,
+      color: color,
+      fontWeight: FontWeight.w600,
+      height: 1.15,
+    ),
+  ),
+  OpcaoFonte(
+    'Manuscrita',
+    ({required fontSize, required color}) => GoogleFonts.pacifico(
+      fontSize: fontSize,
+      color: color,
+      height: 1.15,
+    ),
+  ),
+  OpcaoFonte(
+    'Clássica',
+    ({required fontSize, required color}) => GoogleFonts.poppins(
+      fontSize: fontSize,
+      color: color,
+      fontWeight: FontWeight.w800,
+      height: 1.15,
+    ),
+  ),
+  OpcaoFonte(
+    'Máquina',
+    ({required fontSize, required color}) => GoogleFonts.spaceMono(
+      fontSize: fontSize,
+      color: color,
+      fontWeight: FontWeight.bold,
+      height: 1.15,
+    ),
+  ),
+];
+
 // Um emoji colado no canvas: guarda posição, tamanho e uma chave única
 // (pra identificar qual remover/mover).
 class StickerItem {
@@ -95,7 +154,6 @@ class FundoBombouPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Seed fixo: o padrão não "pisca" ou se reembaralha a cada rebuild.
     final random = math.Random(7);
     final corMarca = corMarcaDagua.withValues(alpha: 0.08);
 
@@ -157,6 +215,7 @@ class _EditorScreenState extends State<EditorScreen> {
   bool _textoClaro = true;
   double _tamanhoFonte = 32;
   bool _compartilhando = false;
+  int _indiceFonteSelecionada = 0;
 
   Offset _posicaoTexto = Offset.zero;
   Size _tamanhoCanvas = Size.zero;
@@ -304,8 +363,6 @@ class _EditorScreenState extends State<EditorScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // Papel de parede do app: fica atrás de tudo, aparecendo nos
-          // espaços em volta do canvas (que tem seu próprio fundo opaco).
           Positioned.fill(
             child: CustomPaint(painter: const FundoBombouPainter()),
           ),
@@ -372,6 +429,9 @@ class _EditorScreenState extends State<EditorScreen> {
           }
         });
 
+        final fonteAtual = fontes[_indiceFonteSelecionada];
+        final corTexto = _textoClaro ? Colors.white : const Color(0xFF14101B);
+
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           decoration: BoxDecoration(
@@ -413,23 +473,22 @@ class _EditorScreenState extends State<EditorScreen> {
                               ? 'Toque abaixo\ne escreva algo'
                               : _textoController.text,
                           textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: _tamanhoFonte,
-                            fontWeight: FontWeight.w800,
-                            height: 1.15,
-                            color: _textoClaro
-                                ? Colors.white
-                                : const Color(0xFF14101B),
-                            shadows: _textoClaro
-                                ? [
-                                    const Shadow(
-                                      color: Colors.black26,
-                                      blurRadius: 12,
-                                      offset: Offset(0, 3),
-                                    ),
-                                  ]
-                                : null,
-                          ),
+                          style: fonteAtual
+                              .construtor(
+                                fontSize: _tamanhoFonte,
+                                color: corTexto,
+                              )
+                              .copyWith(
+                                shadows: _textoClaro
+                                    ? [
+                                        const Shadow(
+                                          color: Colors.black26,
+                                          blurRadius: 12,
+                                          offset: Offset(0, 3),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
                         ),
                       ),
                     ),
@@ -559,6 +618,42 @@ class _EditorScreenState extends State<EditorScreen> {
                       color: corTextoEscuro.withValues(alpha: 0.06),
                     ),
                     child: Text(emoji, style: const TextStyle(fontSize: 22)),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 40,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: fontes.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final fonte = fontes[index];
+                final selecionada = index == _indiceFonteSelecionada;
+                return GestureDetector(
+                  onTap: () => setState(() => _indiceFonteSelecionada = index),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      color: selecionada
+                          ? corCoral.withValues(alpha: 0.15)
+                          : corTextoEscuro.withValues(alpha: 0.06),
+                      border: selecionada
+                          ? Border.all(color: corCoral, width: 1.5)
+                          : null,
+                    ),
+                    child: Text(
+                      'Aa',
+                      style: fonte.construtor(
+                        fontSize: 18,
+                        color: selecionada ? corCoral : corTextoEscuro,
+                      ),
+                    ),
                   ),
                 );
               },
