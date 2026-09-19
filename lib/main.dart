@@ -130,18 +130,23 @@ final List<OpcaoFonte> fontes = [
 ];
 
 // Um emoji colado no canvas: guarda posição, tamanho e uma chave única
-// (pra identificar qual remover/mover).
+// (pra identificar qual remover/mover/redimensionar).
 class StickerItem {
   final Key id;
   final String emoji;
   Offset posicao;
   double tamanho;
 
+  // Usado só durante um gesto de pinça, pra calcular o novo tamanho a
+  // partir do tamanho que ele tinha quando o gesto começou.
+  double tamanhoAoIniciarGesto;
+
   StickerItem({
     required this.emoji,
     required this.posicao,
     this.tamanho = 48,
-  }) : id = UniqueKey();
+  })  : id = UniqueKey(),
+        tamanhoAoIniciarGesto = tamanho;
 }
 
 // ---------------------------------------------------------------------
@@ -221,6 +226,9 @@ class _EditorScreenState extends State<EditorScreen> {
   Size _tamanhoCanvas = Size.zero;
 
   final List<StickerItem> _stickers = [];
+
+  static const double _tamanhoMinimoSticker = 20;
+  static const double _tamanhoMaximoSticker = 140;
 
   @override
   void dispose() {
@@ -319,9 +327,23 @@ class _EditorScreenState extends State<EditorScreen> {
     });
   }
 
-  void _aoArrastarSticker(StickerItem sticker, DragUpdateDetails detalhes) {
+  // Início do gesto no emoji: guarda o tamanho atual como referência
+  // pro cálculo de escala durante o pinch.
+  void _aoIniciarGestoSticker(StickerItem sticker, ScaleStartDetails detalhes) {
+    sticker.tamanhoAoIniciarGesto = sticker.tamanho;
+  }
+
+  // Um único gesto cobre tanto arrastar com 1 dedo (scale fica em 1.0)
+  // quanto redimensionar com 2 dedos (scale varia) — é assim que o
+  // Flutter recomenda combinar pan + pinch no mesmo detector.
+  void _aoAtualizarGestoSticker(StickerItem sticker, ScaleUpdateDetails detalhes) {
     setState(() {
-      sticker.posicao = _clampNaArea(sticker.posicao + detalhes.delta, 16);
+      sticker.posicao = _clampNaArea(
+        sticker.posicao + detalhes.focalPointDelta,
+        16,
+      );
+      sticker.tamanho = (sticker.tamanhoAoIniciarGesto * detalhes.scale)
+          .clamp(_tamanhoMinimoSticker, _tamanhoMaximoSticker);
     });
   }
 
@@ -500,8 +522,10 @@ class _EditorScreenState extends State<EditorScreen> {
                     child: Transform.translate(
                       offset: sticker.posicao,
                       child: GestureDetector(
-                        onPanUpdate: (detalhes) =>
-                            _aoArrastarSticker(sticker, detalhes),
+                        onScaleStart: (detalhes) =>
+                            _aoIniciarGestoSticker(sticker, detalhes),
+                        onScaleUpdate: (detalhes) =>
+                            _aoAtualizarGestoSticker(sticker, detalhes),
                         onLongPress: () => _removerSticker(sticker),
                         child: Container(
                           padding: const EdgeInsets.all(6),
