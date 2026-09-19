@@ -21,7 +21,17 @@ const Color corMarcaDagua = Color(0xFF8C6F5A); // marrom suave (usado com baixa 
 const Color corTextoEscuro = Color(0xFF3A2E27); // texto/ícones fora do canvas
 const Color corCoral = Color(0xFFFF4D6D); // destaque principal (CTA)
 const Color corLimao = Color(0xFFC6FF3D); // destaque de seleção
-const Color corTextoClaro = Color(0xFFF5F1EC); // texto claro, usado dentro do canvas
+
+// Cores disponíveis pro texto colado na imagem.
+const List<Color> coresTexto = [
+  Colors.white,
+  Color(0xFF14101B), // quase preto
+  corCoral,
+  corLimao,
+  Color(0xFF3D8BFF), // azul
+  Color(0xFFFFD23F), // amarelo
+  Color(0xFF00C9A7), // menta
+];
 
 class BombouApp extends StatelessWidget {
   const BombouApp({super.key});
@@ -136,9 +146,6 @@ class StickerItem {
   final String emoji;
   Offset posicao;
   double tamanho;
-
-  // Usado só durante um gesto de pinça, pra calcular o novo tamanho a
-  // partir do tamanho que ele tinha quando o gesto começou.
   double tamanhoAoIniciarGesto;
 
   StickerItem({
@@ -217,10 +224,15 @@ class _EditorScreenState extends State<EditorScreen> {
 
   OpcaoFundo? _fundoSelecionado = fundos[0];
   File? _fotoFundo;
-  bool _textoClaro = true;
   double _tamanhoFonte = 32;
   bool _compartilhando = false;
   int _indiceFonteSelecionada = 0;
+
+  // Cor padrão do texto (aplicada a palavras sem cor própria) e as cores
+  // individuais por palavra (null = usa a cor padrão).
+  Color _corTexto = Colors.white;
+  List<Color?> _coresPalavras = [];
+  int? _indicePalavraSelecionada;
 
   Offset _posicaoTexto = Offset.zero;
   Size _tamanhoCanvas = Size.zero;
@@ -234,6 +246,51 @@ class _EditorScreenState extends State<EditorScreen> {
   void dispose() {
     _textoController.dispose();
     super.dispose();
+  }
+
+  List<String> _obterPalavras() {
+    final texto = _textoController.text.trim();
+    if (texto.isEmpty) return [];
+    return texto.split(RegExp(r'\s+'));
+  }
+
+  void _aoMudarTexto(String _) {
+    setState(() {
+      final palavras = _obterPalavras();
+      if (_coresPalavras.length > palavras.length) {
+        _coresPalavras = _coresPalavras.sublist(0, palavras.length);
+      } else if (_coresPalavras.length < palavras.length) {
+        _coresPalavras = [
+          ..._coresPalavras,
+          ...List<Color?>.filled(palavras.length - _coresPalavras.length, null),
+        ];
+      }
+      if (_indicePalavraSelecionada != null &&
+          _indicePalavraSelecionada! >= palavras.length) {
+        _indicePalavraSelecionada = null;
+      }
+    });
+  }
+
+  void _aoTocarChipPalavra(int index) {
+    setState(() {
+      _indicePalavraSelecionada =
+          _indicePalavraSelecionada == index ? null : index;
+    });
+  }
+
+  void _aoLimparCorPalavra(int index) {
+    setState(() => _coresPalavras[index] = null);
+  }
+
+  void _aoEscolherCor(Color cor) {
+    setState(() {
+      if (_indicePalavraSelecionada != null) {
+        _coresPalavras[_indicePalavraSelecionada!] = cor;
+      } else {
+        _corTexto = cor;
+      }
+    });
   }
 
   Future<void> _escolherFoto() async {
@@ -327,15 +384,10 @@ class _EditorScreenState extends State<EditorScreen> {
     });
   }
 
-  // Início do gesto no emoji: guarda o tamanho atual como referência
-  // pro cálculo de escala durante o pinch.
   void _aoIniciarGestoSticker(StickerItem sticker, ScaleStartDetails detalhes) {
     sticker.tamanhoAoIniciarGesto = sticker.tamanho;
   }
 
-  // Um único gesto cobre tanto arrastar com 1 dedo (scale fica em 1.0)
-  // quanto redimensionar com 2 dedos (scale varia) — é assim que o
-  // Flutter recomenda combinar pan + pinch no mesmo detector.
   void _aoAtualizarGestoSticker(StickerItem sticker, ScaleUpdateDetails detalhes) {
     setState(() {
       sticker.posicao = _clampNaArea(
@@ -413,11 +465,11 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   Widget _buildTopo() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
       child: Row(
         children: [
-          const Text(
+          Text(
             'Bombou!',
             style: TextStyle(
               fontSize: 26,
@@ -426,15 +478,24 @@ class _EditorScreenState extends State<EditorScreen> {
               letterSpacing: -0.5,
             ),
           ),
-          const Spacer(),
-          IconButton(
-            onPressed: () => setState(() => _textoClaro = !_textoClaro),
-            icon: Icon(
-              Icons.contrast,
-              color: corTextoEscuro.withValues(alpha: 0.7),
-            ),
-            tooltip: 'Cor do texto',
-          ),
+        ],
+      ),
+    );
+  }
+
+  // Monta o texto do canvas com cada palavra na sua cor (própria, se
+  // definida, ou a cor padrão) — cada uma com sombra de contraste
+  // calculada pela própria luminância, pra ficar legível sozinha.
+  InlineSpan _construirSpanPalavra(String palavra, Color cor, OpcaoFonte fonte) {
+    final estilo = fonte.construtor(fontSize: _tamanhoFonte, color: cor);
+    final corSombra = cor.computeLuminance() > 0.5
+        ? Colors.black.withValues(alpha: 0.35)
+        : Colors.white.withValues(alpha: 0.35);
+    return TextSpan(
+      text: palavra,
+      style: estilo.copyWith(
+        shadows: [
+          Shadow(color: corSombra, blurRadius: 12, offset: const Offset(0, 3)),
         ],
       ),
     );
@@ -452,7 +513,7 @@ class _EditorScreenState extends State<EditorScreen> {
         });
 
         final fonteAtual = fontes[_indiceFonteSelecionada];
-        final corTexto = _textoClaro ? Colors.white : const Color(0xFF14101B);
+        final palavras = _obterPalavras();
 
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -490,28 +551,33 @@ class _EditorScreenState extends State<EditorScreen> {
                       onPanUpdate: _aoArrastarTexto,
                       child: Container(
                         padding: const EdgeInsets.all(12),
-                        child: Text(
-                          _textoController.text.isEmpty
-                              ? 'Toque abaixo\ne escreva algo'
-                              : _textoController.text,
-                          textAlign: TextAlign.center,
-                          style: fonteAtual
-                              .construtor(
-                                fontSize: _tamanhoFonte,
-                                color: corTexto,
+                        child: palavras.isEmpty
+                            ? Text(
+                                'Toque abaixo\ne escreva algo',
+                                textAlign: TextAlign.center,
+                                style: fonteAtual.construtor(
+                                  fontSize: _tamanhoFonte,
+                                  color: _corTexto,
+                                ),
                               )
-                              .copyWith(
-                                shadows: _textoClaro
-                                    ? [
-                                        const Shadow(
-                                          color: Colors.black26,
-                                          blurRadius: 12,
-                                          offset: Offset(0, 3),
-                                        ),
-                                      ]
-                                    : null,
+                            : RichText(
+                                textAlign: TextAlign.center,
+                                text: TextSpan(
+                                  children: [
+                                    for (var i = 0; i < palavras.length; i++) ...[
+                                      _construirSpanPalavra(
+                                        palavras[i],
+                                        _coresPalavras.length > i
+                                            ? (_coresPalavras[i] ?? _corTexto)
+                                            : _corTexto,
+                                        fonteAtual,
+                                      ),
+                                      if (i < palavras.length - 1)
+                                        const TextSpan(text: ' '),
+                                    ],
+                                  ],
+                                ),
                               ),
-                        ),
                       ),
                     ),
                   ),
@@ -545,8 +611,13 @@ class _EditorScreenState extends State<EditorScreen> {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: (_textoClaro ? Colors.white : Colors.black)
-                          .withValues(alpha: 0.55),
+                      color: Colors.white.withValues(alpha: 0.55),
+                      shadows: [
+                        Shadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 4,
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -559,6 +630,8 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   Widget _buildControles() {
+    final palavras = _obterPalavras();
+
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
       child: Column(
@@ -688,7 +761,7 @@ class _EditorScreenState extends State<EditorScreen> {
             controller: _textoController,
             maxLines: 2,
             maxLength: 80,
-            onChanged: (_) => setState(() {}),
+            onChanged: _aoMudarTexto,
             style: const TextStyle(color: corTextoEscuro),
             decoration: InputDecoration(
               hintText: 'Escreva sua frase...',
@@ -704,7 +777,114 @@ class _EditorScreenState extends State<EditorScreen> {
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
           ),
+          // Chips de palavra — só aparecem quando há mais de uma palavra
+          // (com uma só, colorir "por palavra" ou "no geral" dá no mesmo).
+          if (palavras.length > 1) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 34,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: palavras.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 6),
+                itemBuilder: (context, index) {
+                  final selecionada = _indicePalavraSelecionada == index;
+                  final corDaPalavra = _coresPalavras.length > index
+                      ? (_coresPalavras[index] ?? _corTexto)
+                      : _corTexto;
+                  return GestureDetector(
+                    onTap: () => _aoTocarChipPalavra(index),
+                    onLongPress: () => _aoLimparCorPalavra(index),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        color: corTextoEscuro.withValues(alpha: 0.06),
+                        border: Border.all(
+                          color: selecionada
+                              ? corCoral
+                              : corTextoEscuro.withValues(alpha: 0.15),
+                          width: selecionada ? 2 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: corDaPalavra,
+                              border: Border.all(
+                                color: corTextoEscuro.withValues(alpha: 0.2),
+                              ),
+                            ),
+                          ),
+                          Text(
+                            palavras[index],
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight:
+                                  selecionada ? FontWeight.bold : FontWeight.normal,
+                              color: corTextoEscuro,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
+          Text(
+            _indicePalavraSelecionada != null &&
+                    palavras.length > _indicePalavraSelecionada!
+                ? 'Cor de "${palavras[_indicePalavraSelecionada!]}"'
+                : 'Cor padrão do texto',
+            style: TextStyle(
+              fontSize: 12,
+              color: corTextoEscuro.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 36,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: coresTexto.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final cor = coresTexto[index];
+                final corAtiva = _indicePalavraSelecionada != null &&
+                        _coresPalavras.length > _indicePalavraSelecionada!
+                    ? (_coresPalavras[_indicePalavraSelecionada!] ?? _corTexto)
+                    : _corTexto;
+                final selecionada = cor == corAtiva;
+                return GestureDetector(
+                  onTap: () => _aoEscolherCor(cor),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: cor,
+                      border: Border.all(
+                        color: selecionada
+                            ? corCoral
+                            : corTextoEscuro.withValues(alpha: 0.15),
+                        width: selecionada ? 3 : 1,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 14),
           Row(
             children: [
               const Text('Tamanho', style: TextStyle(color: corTextoEscuro)),
