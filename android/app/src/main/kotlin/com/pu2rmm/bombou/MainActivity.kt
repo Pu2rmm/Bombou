@@ -1,4 +1,4 @@
-package com.example.bombou
+package com.pu2rmm.bombou
 
 import io.flutter.embedding.android.FlutterActivity
 
