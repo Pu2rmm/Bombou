@@ -18,7 +18,9 @@ void main() {
 // do WhatsApp, com marca d'água da palavra "bombou" repetida.
 // ---------------------------------------------------------------------
 const Color corFundoApp = Color(0xFFEDE0D4); // bege quente
-const Color corMarcaDagua = Color(0xFF8C6F5A); // marrom suave (usado com baixa opacidade)
+const Color corMarcaDagua = Color(
+  0xFF8C6F5A,
+); // marrom suave (usado com baixa opacidade)
 const Color corTextoEscuro = Color(0xFF3A2E27); // texto/ícones fora do canvas
 const Color corCoral = Color(0xFFFF4D6D); // destaque principal (CTA)
 const Color corLimao = Color(0xFFC6FF3D); // destaque de seleção
@@ -77,9 +79,34 @@ const List<OpcaoFundo> fundos = [
   OpcaoFundo('Oceano', [Color(0xFF0B0714), Color(0xFF00B4D8)]),
 ];
 
+// ---------------------------------------------------------------------
+// Proporções disponíveis para o card — cada uma pensada pra um destino
+// diferente (Status do WhatsApp, post quadrado, etc.).
+// ---------------------------------------------------------------------
+class OpcaoProporcao {
+  final String nome;
+  final double valor;
+  const OpcaoProporcao(this.nome, this.valor);
+}
+
+const List<OpcaoProporcao> proporcoes = [
+  OpcaoProporcao('Status', 9 / 16),
+  OpcaoProporcao('Quadrado', 1 / 1),
+  OpcaoProporcao('Retrato', 4 / 5),
+  OpcaoProporcao('Paisagem', 16 / 9),
+];
 // Emojis disponíveis pra colar na imagem.
 const List<String> emojisDisponiveis = [
-  '🔥', '😂', '❤️', '😍', '💯', '👏', '😎', '🎉', '💀', '✨',
+  '🔥',
+  '😂',
+  '❤️',
+  '😍',
+  '💯',
+  '👏',
+  '😎',
+  '🎉',
+  '💀',
+  '✨',
 ];
 
 // ---------------------------------------------------------------------
@@ -89,7 +116,7 @@ const List<String> emojisDisponiveis = [
 class OpcaoFonte {
   final String nome;
   final TextStyle Function({required double fontSize, required Color color})
-      construtor;
+  construtor;
 
   const OpcaoFonte(this.nome, this.construtor);
 }
@@ -97,11 +124,8 @@ class OpcaoFonte {
 final List<OpcaoFonte> fontes = [
   OpcaoFonte(
     'Impacto',
-    ({required fontSize, required color}) => GoogleFonts.anton(
-      fontSize: fontSize,
-      color: color,
-      height: 1.15,
-    ),
+    ({required fontSize, required color}) =>
+        GoogleFonts.anton(fontSize: fontSize, color: color, height: 1.15),
   ),
   OpcaoFonte(
     'Arredondada',
@@ -114,11 +138,8 @@ final List<OpcaoFonte> fontes = [
   ),
   OpcaoFonte(
     'Manuscrita',
-    ({required fontSize, required color}) => GoogleFonts.pacifico(
-      fontSize: fontSize,
-      color: color,
-      height: 1.15,
-    ),
+    ({required fontSize, required color}) =>
+        GoogleFonts.pacifico(fontSize: fontSize, color: color, height: 1.15),
   ),
   OpcaoFonte(
     'Clássica',
@@ -149,12 +170,9 @@ class StickerItem {
   double tamanho;
   double tamanhoAoIniciarGesto;
 
-  StickerItem({
-    required this.emoji,
-    required this.posicao,
-    this.tamanho = 48,
-  })  : id = UniqueKey(),
-        tamanhoAoIniciarGesto = tamanho;
+  StickerItem({required this.emoji, required this.posicao, this.tamanho = 48})
+    : id = UniqueKey(),
+      tamanhoAoIniciarGesto = tamanho;
 }
 
 // ---------------------------------------------------------------------
@@ -174,11 +192,19 @@ class FundoBombouPainter extends CustomPainter {
     const espacamentoY = 100.0;
 
     var linha = 0;
-    for (double y = -espacamentoY; y < size.height + espacamentoY; y += espacamentoY) {
+    for (
+      double y = -espacamentoY;
+      y < size.height + espacamentoY;
+      y += espacamentoY
+    ) {
       final deslocamentoLinha = (linha.isOdd) ? espacamentoX / 2 : 0.0;
       linha++;
 
-      for (double x = -espacamentoX; x < size.width + espacamentoX; x += espacamentoX) {
+      for (
+        double x = -espacamentoX;
+        x < size.width + espacamentoX;
+        x += espacamentoX
+      ) {
         final anguloJitter = (random.nextDouble() - 0.5) * 0.2;
         final tamanhoJitter = 20.0 + random.nextDouble() * 6;
 
@@ -247,6 +273,7 @@ class _EditorScreenState extends State<EditorScreen> {
 
   Offset _posicaoTexto = Offset.zero;
   Size _tamanhoCanvas = Size.zero;
+  int _indiceProporcaoSelecionada = 0;
 
   // Rotação do texto (radianos) e valor guardado ao iniciar um gesto de
   // dois dedos, pra calcular a rotação incremental corretamente.
@@ -290,8 +317,9 @@ class _EditorScreenState extends State<EditorScreen> {
 
   void _aoTocarChipPalavra(int index) {
     setState(() {
-      _indicePalavraSelecionada =
-          _indicePalavraSelecionada == index ? null : index;
+      _indicePalavraSelecionada = _indicePalavraSelecionada == index
+          ? null
+          : index;
     });
   }
 
@@ -405,7 +433,10 @@ class _EditorScreenState extends State<EditorScreen> {
   // pan + rotação no mesmo detector.
   void _aoAtualizarGestoTexto(ScaleUpdateDetails detalhes) {
     setState(() {
-      _posicaoTexto = _clampNaArea(_posicaoTexto + detalhes.focalPointDelta, 24);
+      _posicaoTexto = _clampNaArea(
+        _posicaoTexto + detalhes.focalPointDelta,
+        24,
+      );
       _anguloTexto = _anguloAoIniciarGesto + detalhes.rotation;
     });
   }
@@ -414,14 +445,19 @@ class _EditorScreenState extends State<EditorScreen> {
     sticker.tamanhoAoIniciarGesto = sticker.tamanho;
   }
 
-  void _aoAtualizarGestoSticker(StickerItem sticker, ScaleUpdateDetails detalhes) {
+  void _aoAtualizarGestoSticker(
+    StickerItem sticker,
+    ScaleUpdateDetails detalhes,
+  ) {
     setState(() {
       sticker.posicao = _clampNaArea(
         sticker.posicao + detalhes.focalPointDelta,
         16,
       );
-      sticker.tamanho = (sticker.tamanhoAoIniciarGesto * detalhes.scale)
-          .clamp(_tamanhoMinimoSticker, _tamanhoMaximoSticker);
+      sticker.tamanho = (sticker.tamanhoAoIniciarGesto * detalhes.scale).clamp(
+        _tamanhoMinimoSticker,
+        _tamanhoMaximoSticker,
+      );
     });
   }
 
@@ -429,13 +465,13 @@ class _EditorScreenState extends State<EditorScreen> {
     setState(() => _compartilhando = true);
 
     try {
-      final boundary = _canvasKey.currentContext?.findRenderObject()
-          as RenderRepaintBoundary?;
+      final boundary =
+          _canvasKey.currentContext?.findRenderObject()
+              as RenderRepaintBoundary?;
       if (boundary == null) return;
 
       final imagem = await boundary.toImage(pixelRatio: 3.0);
-      final bytesData =
-          await imagem.toByteData(format: ui.ImageByteFormat.png);
+      final bytesData = await imagem.toByteData(format: ui.ImageByteFormat.png);
       if (bytesData == null) return;
 
       final bytes = bytesData.buffer.asUint8List();
@@ -480,7 +516,8 @@ class _EditorScreenState extends State<EditorScreen> {
                 Expanded(
                   child: Center(
                     child: AspectRatio(
-                      aspectRatio: 9 / 16,
+                      aspectRatio:
+                          proporcoes[_indiceProporcaoSelecionada].valor,
                       child: RepaintBoundary(
                         key: _canvasKey,
                         child: _buildCanvas(),
@@ -530,7 +567,11 @@ class _EditorScreenState extends State<EditorScreen> {
     );
   }
 
-  InlineSpan _construirSpanPalavra(String palavra, Color cor, OpcaoFonte fonte) {
+  InlineSpan _construirSpanPalavra(
+    String palavra,
+    Color cor,
+    OpcaoFonte fonte,
+  ) {
     final estilo = fonte.construtor(fontSize: _tamanhoFonte, color: cor);
     final corSombra = cor.computeLuminance() > 0.5
         ? Colors.black.withValues(alpha: 0.35)
@@ -549,8 +590,10 @@ class _EditorScreenState extends State<EditorScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          final tamanhoAtual =
-              Size(constraints.maxWidth, constraints.maxHeight);
+          final tamanhoAtual = Size(
+            constraints.maxWidth,
+            constraints.maxHeight,
+          );
           if (_tamanhoCanvas != tamanhoAtual && mounted) {
             setState(() => _tamanhoCanvas = tamanhoAtual);
           }
@@ -611,7 +654,11 @@ class _EditorScreenState extends State<EditorScreen> {
                                   textAlign: TextAlign.center,
                                   text: TextSpan(
                                     children: [
-                                      for (var i = 0; i < palavras.length; i++) ...[
+                                      for (
+                                        var i = 0;
+                                        i < palavras.length;
+                                        i++
+                                      ) ...[
                                         _construirSpanPalavra(
                                           palavras[i],
                                           _coresPalavras.length > i
@@ -686,6 +733,46 @@ class _EditorScreenState extends State<EditorScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(
+            height: 32,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: proporcoes.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final proporcao = proporcoes[index];
+                final selecionada = index == _indiceProporcaoSelecionada;
+                return GestureDetector(
+                  onTap: () =>
+                      setState(() => _indiceProporcaoSelecionada = index),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      color: selecionada
+                          ? corCoral.withValues(alpha: 0.15)
+                          : corTextoEscuro.withValues(alpha: 0.06),
+                      border: selecionada
+                          ? Border.all(color: corCoral, width: 1.5)
+                          : null,
+                    ),
+                    child: Text(
+                      proporcao.nome,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: selecionada
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        color: selecionada ? corCoral : corTextoEscuro,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
             height: 64,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
@@ -714,8 +801,11 @@ class _EditorScreenState extends State<EditorScreen> {
                               ),
                       ),
                       child: _fotoFundo == null
-                          ? const Icon(Icons.add_a_photo,
-                              color: corTextoEscuro, size: 22)
+                          ? const Icon(
+                              Icons.add_a_photo,
+                              color: corTextoEscuro,
+                              size: 22,
+                            )
                           : null,
                     ),
                   );
@@ -813,16 +903,22 @@ class _EditorScreenState extends State<EditorScreen> {
             style: const TextStyle(color: corTextoEscuro),
             decoration: InputDecoration(
               hintText: 'Escreva sua frase...',
-              hintStyle: TextStyle(color: corTextoEscuro.withValues(alpha: 0.4)),
+              hintStyle: TextStyle(
+                color: corTextoEscuro.withValues(alpha: 0.4),
+              ),
               filled: true,
               fillColor: Colors.white.withValues(alpha: 0.5),
-              counterStyle: TextStyle(color: corTextoEscuro.withValues(alpha: 0.4)),
+              counterStyle: TextStyle(
+                color: corTextoEscuro.withValues(alpha: 0.4),
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide.none,
               ),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
             ),
           ),
           if (palavras.length > 1) ...[
@@ -842,7 +938,10 @@ class _EditorScreenState extends State<EditorScreen> {
                     onTap: () => _aoTocarChipPalavra(index),
                     onLongPress: () => _aoLimparCorPalavra(index),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(16),
                         color: corTextoEscuro.withValues(alpha: 0.06),
@@ -872,8 +971,9 @@ class _EditorScreenState extends State<EditorScreen> {
                             palavras[index],
                             style: TextStyle(
                               fontSize: 13,
-                              fontWeight:
-                                  selecionada ? FontWeight.bold : FontWeight.normal,
+                              fontWeight: selecionada
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                               color: corTextoEscuro,
                             ),
                           ),
@@ -905,7 +1005,8 @@ class _EditorScreenState extends State<EditorScreen> {
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
                 final cor = coresTexto[index];
-                final corAtiva = _indicePalavraSelecionada != null &&
+                final corAtiva =
+                    _indicePalavraSelecionada != null &&
                         _coresPalavras.length > _indicePalavraSelecionada!
                     ? (_coresPalavras[_indicePalavraSelecionada!] ?? _corTexto)
                     : _corTexto;
@@ -979,7 +1080,10 @@ class _EditorScreenState extends State<EditorScreen> {
                   : const Icon(Icons.ios_share),
               label: Text(
                 _compartilhando ? 'Gerando...' : 'Compartilhar no Status',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
               ),
             ),
           ),
@@ -1012,14 +1116,15 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
 
   Future<void> _carregar() async {
     final pasta = await _obterPastaHistorico();
-    final arquivos = pasta
-        .listSync()
-        .whereType<File>()
-        .where((arquivo) => arquivo.path.endsWith('.png'))
-        .toList()
-      ..sort(
-        (a, b) => b.statSync().modified.compareTo(a.statSync().modified),
-      );
+    final arquivos =
+        pasta
+            .listSync()
+            .whereType<File>()
+            .where((arquivo) => arquivo.path.endsWith('.png'))
+            .toList()
+          ..sort(
+            (a, b) => b.statSync().modified.compareTo(a.statSync().modified),
+          );
 
     if (mounted) {
       setState(() {
@@ -1036,10 +1141,7 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
 
   Future<void> _compartilharDeNovo(File arquivo) async {
     await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(arquivo.path)],
-        text: 'Feito com o Bombou! 🔥',
-      ),
+      ShareParams(files: [XFile(arquivo.path)], text: 'Feito com o Bombou! 🔥'),
     );
   }
 
@@ -1108,44 +1210,39 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
         iconTheme: const IconThemeData(color: corTextoEscuro),
         title: const Text(
           'Minhas criações',
-          style: TextStyle(
-            color: corTextoEscuro,
-            fontWeight: FontWeight.w900,
-          ),
+          style: TextStyle(color: corTextoEscuro, fontWeight: FontWeight.w900),
         ),
       ),
       body: _carregando
           ? const Center(child: CircularProgressIndicator(color: corCoral))
           : _arquivos.isEmpty
-              ? Center(
-                  child: Text(
-                    'Nenhuma criação ainda.\nCompartilhe algo pra ver aqui!',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: corTextoEscuro.withValues(alpha: 0.5),
-                    ),
+          ? Center(
+              child: Text(
+                'Nenhuma criação ainda.\nCompartilhe algo pra ver aqui!',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: corTextoEscuro.withValues(alpha: 0.5)),
+              ),
+            )
+          : GridView.builder(
+              padding: const EdgeInsets.all(16),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 9 / 16,
+              ),
+              itemCount: _arquivos.length,
+              itemBuilder: (context, index) {
+                final arquivo = _arquivos[index];
+                return GestureDetector(
+                  onTap: () => _abrirDetalhe(arquivo),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.file(arquivo, fit: BoxFit.cover),
                   ),
-                )
-              : GridView.builder(
-                  padding: const EdgeInsets.all(16),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                    childAspectRatio: 9 / 16,
-                  ),
-                  itemCount: _arquivos.length,
-                  itemBuilder: (context, index) {
-                    final arquivo = _arquivos[index];
-                    return GestureDetector(
-                      onTap: () => _abrirDetalhe(arquivo),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.file(arquivo, fit: BoxFit.cover),
-                      ),
-                    );
-                  },
-                ),
+                );
+              },
+            ),
     );
   }
 }
