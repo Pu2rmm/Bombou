@@ -1229,7 +1229,7 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                 crossAxisCount: 3,
                 crossAxisSpacing: 10,
                 mainAxisSpacing: 10,
-                childAspectRatio: 9 / 16,
+                childAspectRatio: 3 / 4,
               ),
               itemCount: _arquivos.length,
               itemBuilder: (context, index) {
@@ -1238,7 +1238,10 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                   onTap: () => _abrirDetalhe(arquivo),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.file(arquivo, fit: BoxFit.cover),
+                    child: ColoredBox(
+                      color: corTextoEscuro.withValues(alpha: 0.08),
+                      child: Image.file(arquivo, fit: BoxFit.contain),
+                    ),
                   ),
                 );
               },
