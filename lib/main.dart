@@ -9,6 +9,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'ajuda/botao_ajuda.dart';
+
 void main() {
   runApp(const BombouApp());
 }
@@ -549,6 +551,7 @@ class _EditorScreenState extends State<EditorScreen> {
             ),
           ),
           const Spacer(),
+          BotaoManual(cor: corTextoEscuro.withValues(alpha: 0.7)),
           IconButton(
             onPressed: () {
               Navigator.push(
@@ -1212,6 +1215,7 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
           'Minhas criações',
           style: TextStyle(color: corTextoEscuro, fontWeight: FontWeight.w900),
         ),
+        actions: const [BotaoAjuda(SecaoAjuda.historico, cor: corTextoEscuro)],
       ),
       body: _carregando
           ? const Center(child: CircularProgressIndicator(color: corCoral))
